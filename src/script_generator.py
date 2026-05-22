@@ -1,14 +1,14 @@
-import google.generativeai as genai
+from google import genai
 import os
 import json
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def generate_script(topic_data):
     """Generate Hinglish script for YouTube Short"""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        
         
         topic = topic_data.get("selected_topic", "")
         hook = topic_data.get("hook", "")
@@ -43,8 +43,11 @@ Return ONLY a JSON object like this:
 Return only JSON, no other text.
 """
         
-        response = model.generate_content(prompt)
-        text = response.text.strip()
+        response = client.models.generate_content(
+    model='gemini-2.0-flash',
+    contents=prompt
+)
+text = response.text.strip()
         
         # Clean JSON
         if "```json" in text:
