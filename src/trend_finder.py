@@ -1,12 +1,12 @@
 import requests
 import os
 import json
-import google.generativeai as genai
+from google import genai
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def get_news_topics():
     try:
@@ -76,8 +76,10 @@ Return ONLY this JSON, no other text:
     "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }}"""
 
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         text = response.text.strip()
 
         if "```json" in text:
@@ -91,8 +93,6 @@ Return ONLY this JSON, no other text:
 
     except Exception as e:
         print(f"Gemini error: {e}")
-
-        # Fallback topic if Gemini fails
         return {
             "selected_topic": "India shocking facts 2025",
             "reason": "Always viral in India",
@@ -120,7 +120,6 @@ def find_best_topic():
         ]
 
     print(f"Total topics: {len(all_topics)}")
-
     best = score_topic(all_topics)
 
     if best:
