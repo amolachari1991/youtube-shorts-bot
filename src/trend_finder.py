@@ -1,6 +1,6 @@
 import requests
 from pytrends.request import TrendReq
-import google.generativeai as genai
+from google import genai
 import os
 import json
 from datetime import datetime, timedelta
@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def get_google_trends():
     """Get trending topics from Google Trends India"""
@@ -68,7 +68,7 @@ def get_youtube_trends():
 def score_topic_with_gemini(topics):
     """Use Gemini AI to pick best topic for viral Shorts"""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        
         
         topics_text = "\n".join([f"{i+1}. {topic}" for i, topic in enumerate(topics[:20])])
         
@@ -96,8 +96,11 @@ Return ONLY a JSON object like this:
 Return only JSON, no other text.
 """
         
-        response = model.generate_content(prompt)
-        text = response.text.strip()
+    response = client.models.generate_content(
+    model='gemini-2.0-flash',
+    contents=prompt
+)
+text = response.text.strip()
         
         # Clean JSON
         if "```json" in text:
