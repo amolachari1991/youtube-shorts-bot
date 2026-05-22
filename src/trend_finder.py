@@ -1,32 +1,12 @@
 import requests
 import os
 import json
-
-try:
-    from pytrends.request import TrendReq
-    PYTRENDS_AVAILABLE = True
-except Exception:
-    PYTRENDS_AVAILABLE = False
-
 import google.generativeai as genai
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-
-def get_google_trends():
-    try:
-        if not PYTRENDS_AVAILABLE:
-            return []
-        pytrends = TrendReq(hl='hi-IN', tz=330)
-        trending = pytrends.trending_searches(pn='india')
-        topics = trending[0].tolist()[:10]
-        print(f"Google Trends: {topics[:5]}")
-        return topics
-    except Exception as e:
-        print(f"Google Trends error: {e}")
-        return []
 
 def get_news_topics():
     try:
@@ -47,6 +27,29 @@ def get_news_topics():
         return topics
     except Exception as e:
         print(f"News error: {e}")
+        return []
+
+def get_extra_topics():
+    try:
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": "india viral trending",
+            "apiKey": NEWS_API_KEY,
+            "pageSize": 10,
+            "sortBy": "popularity",
+            "language": "en"
+        }
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        topics = []
+        if data.get("articles"):
+            for article in data["articles"]:
+                if article.get("title"):
+                    topics.append(article["title"])
+        print(f"Extra topics: {len(topics)}")
+        return topics
+    except Exception as e:
+        print(f"Extra topics error: {e}")
         return []
 
 def score_topic(topics):
@@ -73,7 +76,7 @@ Return ONLY this JSON, no other text:
     "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }}"""
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content(prompt)
         text = response.text.strip()
 
@@ -88,7 +91,15 @@ Return ONLY this JSON, no other text:
 
     except Exception as e:
         print(f"Gemini error: {e}")
-        return None
+
+        # Fallback topic if Gemini fails
+        return {
+            "selected_topic": "India shocking facts 2025",
+            "reason": "Always viral in India",
+            "hook": "Ye baat 99% log nahi jaante...",
+            "title": "99% Indians Don't Know This Shocking Fact",
+            "tags": ["india", "facts", "viral", "shocking", "hindi"]
+        }
 
 def find_best_topic():
     print("=" * 50)
@@ -96,8 +107,8 @@ def find_best_topic():
     print("=" * 50)
 
     all_topics = []
-    all_topics.extend(get_google_trends())
     all_topics.extend(get_news_topics())
+    all_topics.extend(get_extra_topics())
 
     if not all_topics:
         all_topics = [
