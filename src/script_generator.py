@@ -1,9 +1,9 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def generate_script(topic_data):
     try:
@@ -36,8 +36,10 @@ Return ONLY this JSON, no other text:
     "description": "100 word YouTube description with hashtags"
 }}"""
 
-        model = genai.GenerativeModel('​gemini-2.5-flash')
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         text = response.text.strip()
 
         if "```json" in text:
