@@ -36,7 +36,7 @@ Return ONLY this JSON, no other text:
     "description": "100 word YouTube description with hashtags"
 }}"""
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content(prompt)
         text = response.text.strip()
 
