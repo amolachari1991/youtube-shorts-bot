@@ -2,12 +2,11 @@ import requests
 import os
 import json
 import random
-from moviepy.editor import (
+from moviepy import (
     VideoFileClip, AudioFileClip, TextClip,
     CompositeVideoClip, concatenate_videoclips,
     ColorClip
 )
-from moviepy.config import change_settings
 import numpy as np
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
