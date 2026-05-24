@@ -18,7 +18,7 @@ HEIGHT = 1920
 def download_clips(topic, num=5):
     try:
         print(f"Searching videos for: {topic}")
-        words = " ".join(topic.split()[:3])
+        words = " ".join(str(topic).split()[:3])
         headers = {"Authorization": PEXELS_API_KEY}
         url = "https://api.pexels.com/videos/search"
         params = {
@@ -77,24 +77,27 @@ def download_clips(topic, num=5):
 def process_clip(path, duration=10):
     try:
         clip = VideoFileClip(path)
+
+        # Trim clip
         if clip.duration > duration:
             start = random.uniform(0, clip.duration - duration)
-            clip = clip.subclip(start, start + duration)
+            clip = clip.with_subclip(start, start + duration)
 
+        # Crop to portrait
         clip_ratio = clip.w / clip.h
         target_ratio = WIDTH / HEIGHT
 
         if clip_ratio > target_ratio:
             new_w = int(clip.h * target_ratio)
             x = clip.w // 2
-            clip = clip.crop(
+            clip = clip.cropped(
                 x1=x - new_w // 2,
                 x2=x + new_w // 2
             )
         else:
             new_h = int(clip.w / target_ratio)
             y = clip.h // 2
-            clip = clip.crop(
+            clip = clip.cropped(
                 y1=y - new_h // 2,
                 y2=y + new_h // 2
             )
@@ -143,7 +146,7 @@ def assemble_video(script_data, clips, output="output_video.mp4"):
                 [video] * loops, method="compose"
             )
 
-        video = video.subclip(0, duration)
+        video = video.with_subclip(0, duration)
 
         overlay = ColorClip(
             size=(WIDTH, HEIGHT),
@@ -183,7 +186,7 @@ def assemble_video(script_data, clips, output="output_video.mp4"):
             print(f"Watermark error: {e}")
 
         final = CompositeVideoClip(layers)
-        final = final.subclip(0, duration)
+        final = final.with_subclip(0, duration)
         final = final.with_audio(audio)
 
         print(f"Exporting to {output}...")
