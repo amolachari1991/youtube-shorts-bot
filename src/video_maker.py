@@ -78,12 +78,10 @@ def process_clip(path, duration=10):
     try:
         clip = VideoFileClip(path)
 
-        # Trim clip
         if clip.duration > duration:
             start = random.uniform(0, clip.duration - duration)
             clip = clip.with_subclip(start, start + duration)
 
-        # Crop to portrait
         clip_ratio = clip.w / clip.h
         target_ratio = WIDTH / HEIGHT
 
@@ -108,6 +106,21 @@ def process_clip(path, duration=10):
     except Exception as e:
         print(f"Process clip error: {e}")
         return None
+
+def get_font():
+    """Find available font on system"""
+    fonts = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    for font in fonts:
+        if os.path.exists(font):
+            print(f"Using font: {font}")
+            return font
+    print("No font found, using default")
+    return None
 
 def assemble_video(script_data, clips, output="output_video.mp4"):
     try:
@@ -156,34 +169,39 @@ def assemble_video(script_data, clips, output="output_video.mp4"):
 
         layers = [video, overlay]
 
+        font = get_font()
+
         hook = script_data.get("hook_text", "")
-        if hook:
+        if hook and font:
             try:
                 hook_clip = TextClip(
                     text=hook,
                     font_size=70,
                     color="yellow",
-                    font="DejaVu-Sans-Bold",
+                    font=font,
                     method="caption",
                     size=(WIDTH - 100, None),
                     text_align="center",
                     duration=4
                 ).with_position("center")
                 layers.append(hook_clip.with_start(0))
+                print("Hook text added")
             except Exception as e:
                 print(f"Hook text error: {e}")
 
-        try:
-            watermark = TextClip(
-                text="FOLLOW FOR MORE",
-                font_size=35,
-                color="white",
-                font="DejaVu-Sans-Bold",
-                duration=duration
-            ).with_position(("center", HEIGHT - 150))
-            layers.append(watermark)
-        except Exception as e:
-            print(f"Watermark error: {e}")
+        if font:
+            try:
+                watermark = TextClip(
+                    text="FOLLOW FOR MORE",
+                    font_size=35,
+                    color="white",
+                    font=font,
+                    duration=duration
+                ).with_position(("center", HEIGHT - 150))
+                layers.append(watermark)
+                print("Watermark added")
+            except Exception as e:
+                print(f"Watermark error: {e}")
 
         final = CompositeVideoClip(layers)
         final = final.with_subclip(0, duration)
@@ -197,7 +215,6 @@ def assemble_video(script_data, clips, output="output_video.mp4"):
             audio_codec="aac",
             temp_audiofile="temp_audio.m4a",
             remove_temp=True,
-            verbose=False,
             logger=None
         )
         print(f"Video exported: {output}")
