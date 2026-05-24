@@ -4,9 +4,100 @@ import json
 from google import genai
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+def call_gemini(prompt):
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        print("Gemini responded successfully")
+        return response.text.strip(), None
+    except Exception as e:
+        error = str(e)
+        if "429" in error or "RESOURCE_EXHAUSTED" in error:
+            return None, "QUOTA_EXHAUSTED"
+        elif "401" in error or "403" in error:
+            return None, "INVALID_KEY"
+        else:
+            return None, f"ERROR: {error}"
+
+def call_groq(prompt):
+    try:
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "llama3-70b-8192",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 1000
+        }
+        response = requests.post(
+            url, headers=headers, json=data, timeout=30
+        )
+        result = response.json()
+
+        if "error" in result:
+            error = result["error"].get("message", "")
+            if "429" in str(result["error"].get("code", "")):
+                return None, "QUOTA_EXHAUSTED"
+            elif "401" in str(result["error"].get("code", "")):
+                return None, "INVALID_KEY"
+            else:
+                return None, f"ERROR: {error}"
+
+        print("Groq responded successfully")
+        return result["choices"][0]["message"]["content"], None
+
+    except Exception as e:
+        return None, f"ERROR: {str(e)}"
+
+def call_ai(prompt):
+    """Try Gemini first, fallback to Groq with smart error handling"""
+
+    # Try Gemini
+    print("Trying Gemini...")
+    text, error = call_gemini(prompt)
+    if text:
+        return text, None
+
+    # Handle Gemini failure
+    if error == "QUOTA_EXHAUSTED":
+        print("Gemini quota exhausted, switching to Groq...")
+    elif error == "INVALID_KEY":
+        return None, "❌ Gemini API key is invalid\n\n✅ Fix: Update GEMINI_API_KEY in GitHub Secrets"
+    else:
+        print(f"Gemini error: {error}, trying Groq...")
+
+    # Try Groq
+    print("Trying Groq...")
+    text, error = call_groq(prompt)
+    if text:
+        return text, None
+
+    # Handle Groq failure
+    if error == "QUOTA_EXHAUSTED":
+        return None, """❌ Both Gemini and Groq quota exhausted
+
+✅ What to do:
+1. Wait until tomorrow for quota reset
+   OR
+2. Create new Gemini key:
+   • Go to aistudio.google.com
+   • Create new API key
+   • Update GEMINI_API_KEY in GitHub Secrets"""
+
+    elif error == "INVALID_KEY":
+        return None, "❌ Groq API key is invalid\n\n✅ Fix: Update GROQ_API_KEY in GitHub Secrets"
+
+    else:
+        return None, f"❌ Both AI APIs failed\n\nReason: {error}\n\n✅ Fix: Check your internet or API keys"
 
 def get_news_topics():
     try:
@@ -53,12 +144,11 @@ def get_extra_topics():
         return []
 
 def score_topic(topics):
-    try:
-        topics_text = "\n".join(
-            [f"{i+1}. {t}" for i, t in enumerate(topics[:20])]
-        )
+    topics_text = "\n".join(
+        [f"{i+1}. {t}" for i, t in enumerate(topics[:20])]
+    )
 
-        prompt = f"""You are a viral YouTube Shorts expert for Indian audience.
+    prompt = f"""You are a viral YouTube Shorts expert for Indian audience.
 
 Today's trending topics in India:
 {topics_text}
@@ -76,12 +166,12 @@ Return ONLY this JSON, no other text:
     "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }}"""
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
-        )
-        text = response.text.strip()
+    text, error = call_ai(prompt)
 
+    if error:
+        return None, error
+
+    try:
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -89,17 +179,10 @@ Return ONLY this JSON, no other text:
 
         result = json.loads(text)
         print(f"Topic: {result['selected_topic']}")
-        return result
+        return result, None
 
     except Exception as e:
-        print(f"Gemini error: {e}")
-        return {
-            "selected_topic": "India shocking facts 2025",
-            "reason": "Always viral in India",
-            "hook": "Ye baat 99% log nahi jaante...",
-            "title": "99% Indians Don't Know This Shocking Fact",
-            "tags": ["india", "facts", "viral", "shocking", "hindi"]
-        }
+        return None, f"❌ AI response parsing failed\n\nReason: {str(e)}"
 
 def find_best_topic():
     print("=" * 50)
@@ -111,6 +194,7 @@ def find_best_topic():
     all_topics.extend(get_extra_topics())
 
     if not all_topics:
+        print("No news found, using fallback topics")
         all_topics = [
             "India shocking news today",
             "viral india 2025",
@@ -120,17 +204,23 @@ def find_best_topic():
         ]
 
     print(f"Total topics: {len(all_topics)}")
-    best = score_topic(all_topics)
+    result, error = score_topic(all_topics)
 
-    if best:
+    if error:
+        print(f"Pipeline error: {error}")
+        return None, error
+
+    if result:
         with open("topic.json", "w", encoding="utf-8") as f:
-            json.dump(best, f, ensure_ascii=False, indent=2)
+            json.dump(result, f, ensure_ascii=False, indent=2)
         print("Saved topic.json")
-        return best
+        return result, None
 
-    return None
+    return None, "❌ Unknown error finding topic"
 
 if __name__ == "__main__":
-    result = find_best_topic()
+    result, error = find_best_topic()
     if result:
         print(f"Best Topic: {result['selected_topic']}")
+    else:
+        print(f"Failed: {error}")
