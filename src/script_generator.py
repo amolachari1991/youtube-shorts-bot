@@ -1,13 +1,13 @@
 import requests
 import os
 import json
-from google import genai
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 def call_gemini(prompt):
     try:
+        from google import genai
         client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
             model="gemini-2.0-flash",
@@ -19,8 +19,6 @@ def call_gemini(prompt):
         error = str(e)
         if "429" in error or "RESOURCE_EXHAUSTED" in error:
             return None, "QUOTA_EXHAUSTED"
-        elif "401" in error or "403" in error:
-            return None, "INVALID_KEY"
         else:
             return None, f"ERROR: {error}"
 
@@ -34,127 +32,107 @@ def call_groq(prompt):
         data = {
             "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_tokens": 1000
+            "temperature": 0.8,
+            "max_tokens": 2000
         }
         response = requests.post(
             url, headers=headers, json=data, timeout=30
         )
         result = response.json()
-
         if "error" in result:
-            error = result["error"].get("message", "")
-            if "429" in str(result["error"].get("code", "")):
+            code = str(result["error"].get("code", ""))
+            if "429" in code:
                 return None, "QUOTA_EXHAUSTED"
-            elif "401" in str(result["error"].get("code", "")):
-                return None, "INVALID_KEY"
-            else:
-                return None, f"ERROR: {error}"
-
+            return None, f"ERROR: {result['error'].get('message', '')}"
         print("Groq responded successfully")
         return result["choices"][0]["message"]["content"], None
-
     except Exception as e:
         return None, f"ERROR: {str(e)}"
 
 def call_ai(prompt):
-    """Try Gemini first, fallback to Groq"""
-
     print("Trying Gemini...")
     text, error = call_gemini(prompt)
     if text:
         return text, None
-
-    if error == "QUOTA_EXHAUSTED":
-        print("Gemini quota exhausted, switching to Groq...")
-    elif error == "INVALID_KEY":
-        return None, "❌ Gemini API key invalid\n\n✅ Fix: Update GEMINI_API_KEY in GitHub Secrets"
-    else:
-        print(f"Gemini error: {error}, trying Groq...")
-
-    print("Trying Groq...")
+    print(f"Gemini failed: {error}, trying Groq...")
     text, error = call_groq(prompt)
     if text:
         return text, None
+    return None, f"❌ Both APIs failed: {error}"
 
-    if error == "QUOTA_EXHAUSTED":
-        return None, """❌ Both Gemini and Groq quota exhausted
-
-✅ What to do:
-1. Wait until tomorrow for quota reset
-   OR
-2. Create new Gemini key:
-   • Go to aistudio.google.com
-   • Create new API key
-   • Update GEMINI_API_KEY in GitHub Secrets"""
-
-    elif error == "INVALID_KEY":
-        return None, "❌ Groq API key invalid\n\n✅ Fix: Update GROQ_API_KEY in GitHub Secrets"
-
-    else:
-        return None, f"❌ Both APIs failed\n\nReason: {error}"
-
-def generate_script(topic_data):
+def generate_script_and_prompts(topic_data):
     try:
         topic = topic_data.get("selected_topic", "")
         hook = topic_data.get("hook", "")
+        veo_style = topic_data.get("veo_style", "cinematic documentary")
 
-        prompt = f"""You are a viral YouTube Shorts scriptwriter for Indian audience.
+        prompt = f"""You are a viral YouTube Shorts expert for Indian audience.
 
 Topic: {topic}
-Opening Hook: {hook}
+Hook: {hook}
+Video Style: {veo_style}
 
-Write a 55-60 second YouTube Shorts script in Hinglish.
+Task 1 - Write a 15-20 second Hinglish script:
+- Start with the hook
+- Simple conversational Hinglish
+- Shocking facts with pauses
+- End with: "Follow karo aur share karo!"
+- Total 60-80 words only
 
-Rules:
-1. Start with the hook provided
-2. Simple conversational language
-3. One fact every 5-7 seconds
-4. Build curiosity throughout
-5. End with: Follow karo aisi aur shocking videos ke liye
-6. Total 130-150 words only
-7. Write as someone would SPEAK
-8. Add [PAUSE] for dramatic effect
+Task 2 - Write 2 Veo 3.1 video prompts:
+- Each prompt generates 8-10 seconds of video
+- Together they make 15-20 seconds total
+- Style: {veo_style}
+- Must be visually stunning and relevant to topic
+- Include: lighting, camera angle, mood, setting
+- Format for portrait 9:16 vertical video
+- No text or words in video
+- No people's faces (avoid copyright issues)
+- Focus on: nature, cities, objects, animals, space, technology
 
-Return ONLY this JSON, no other text:
+Return ONLY this JSON, no markdown, no extra text:
 {{
-    "full_script": "complete script with [PAUSE] markers",
-    "hook_text": "first 3 seconds text for screen",
-    "key_points": ["point1", "point2", "point3"],
-    "thumbnail_text": "max 5 bold words for thumbnail",
-    "description": "100 word YouTube description with hashtags"
+    "full_script": "complete hinglish script with [PAUSE] markers",
+    "hook_text": "first 3 seconds text overlay for screen",
+    "thumbnail_text": "5 shocking words for thumbnail",
+    "description": "80 word YouTube description with hashtags",
+    "veo_prompts": [
+        "Detailed Veo 3.1 prompt for clip 1 (8-10 seconds)",
+        "Detailed Veo 3.1 prompt for clip 2 (8-10 seconds)"
+    ]
 }}"""
 
         text, error = call_ai(prompt)
-
         if error:
             return None, error
 
+        text = text.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
             text = text.split("```")[1].split("```")[0].strip()
 
         result = json.loads(text)
-        print(f"Script generated")
-        print(f"Hook: {result['hook_text']}")
+        print(f"Script generated successfully")
+        print(f"Hook: {result.get('hook_text', '')}")
+        print(f"Veo prompts: {len(result.get('veo_prompts', []))}")
         return result, None
 
     except Exception as e:
-        return None, f"❌ Script generation failed\n\nReason: {str(e)}"
+        return None, f"❌ Script generation failed: {str(e)}"
 
 def generate_full_content():
     print("=" * 50)
-    print("Generating script...")
+    print("Generating script and Veo prompts...")
     print("=" * 50)
 
     try:
         with open("topic.json", "r", encoding="utf-8") as f:
             topic_data = json.load(f)
     except Exception as e:
-        return None, f"❌ Could not load topic\n\nReason: {str(e)}"
+        return None, f"❌ Could not load topic: {str(e)}"
 
-    script, error = generate_script(topic_data)
+    script, error = generate_script_and_prompts(topic_data)
 
     if error:
         return None, error
@@ -171,6 +149,7 @@ def generate_full_content():
 if __name__ == "__main__":
     result, error = generate_full_content()
     if result:
-        print(f"Script ready for: {result['selected_topic']}")
+        print(f"\nScript ready!")
+        print(f"Veo prompts: {result.get('veo_prompts', [])}")
     else:
-        print(f"Failed: {error}")
+        print(f"\nFailed: {error}")
