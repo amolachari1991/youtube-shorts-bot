@@ -1,5 +1,4 @@
 import os
-import json
 import sys
 import traceback
 
@@ -11,12 +10,9 @@ from notifier import notify_start, notify_ready, notify_error
 
 def cleanup():
     files = [
-        "topic.json",
-        "script.json",
-        "voiceover.mp3",
-        "timings.json",
-        "output_video.mp4",
-        "temp_audio.m4a"
+        "topic.json", "script.json",
+        "voiceover.mp3", "timings.json",
+        "output_video.mp4", "temp_audio.m4a"
     ]
     for f in files:
         if os.path.exists(f):
@@ -34,6 +30,7 @@ def cleanup():
 def check_keys():
     keys = [
         "GEMINI_API_KEY",
+        "GROQ_API_KEY",
         "PEXELS_API_KEY",
         "NEWS_API_KEY",
         "TELEGRAM_BOT_TOKEN",
@@ -54,11 +51,10 @@ def run():
     # Check keys
     print("\nChecking API keys...")
     if not check_keys():
-        notify_error("Missing API keys")
+        notify_error("❌ Missing API keys in GitHub Secrets")
         sys.exit(1)
 
     # Notify start
-    print("\nSending start notification...")
     notify_start()
 
     # Cleanup
@@ -67,17 +63,17 @@ def run():
 
     # Step 1 - Find topic
     print("\nStep 1: Finding trending topic...")
-    topic = find_best_topic()
-    if not topic:
-        notify_error("Could not find trending topic")
+    topic, error = find_best_topic()
+    if error:
+        notify_error(f"Step 1 Failed\n\n{error}")
         sys.exit(1)
     print(f"Topic: {topic['selected_topic']}")
 
     # Step 2 - Generate script
     print("\nStep 2: Generating script...")
-    script = generate_full_content()
-    if not script:
-        notify_error("Could not generate script")
+    script, error = generate_full_content()
+    if error:
+        notify_error(f"Step 2 Failed\n\n{error}")
         sys.exit(1)
     print("Script ready")
 
@@ -85,7 +81,7 @@ def run():
     print("\nStep 3: Generating voiceover...")
     voice = generate_voiceover()
     if not voice:
-        notify_error("Could not generate voiceover")
+        notify_error("❌ Voiceover generation failed\n\n✅ Fix: Check edge-tts installation")
         sys.exit(1)
     print("Voiceover ready")
 
@@ -93,7 +89,7 @@ def run():
     print("\nStep 4: Creating video...")
     video = make_video()
     if not video:
-        notify_error("Could not create video")
+        notify_error("❌ Video creation failed\n\n✅ Fix: Check Pexels API key or FFmpeg")
         sys.exit(1)
     print("Video ready")
 
@@ -112,7 +108,7 @@ if __name__ == "__main__":
     try:
         run()
     except Exception as e:
-        msg = f"{str(e)}\n{traceback.format_exc()}"
+        msg = str(e)
         print(f"Pipeline failed: {msg}")
-        notify_error(str(e))
+        notify_error(f"❌ Unexpected Error\n\n{msg}")
         sys.exit(1)
